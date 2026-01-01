@@ -9,26 +9,58 @@ use Illuminate\Support\Facades\Auth;
 
 class ApiPagamentoController extends Controller
 {
-    // Listar pagamentos de uma fatura
+    /**
+     * Buscar o tenant atual
+     */
+    private function tenantId()
+    {
+        return Auth::user()->tenant_id;
+    }
+
+    /**
+     * Buscar pagamento garantindo que pertence ao tenant
+     */
+    private function findPagamento($id)
+    {
+        return Pagamento::where('id', $id)
+                        ->where('tenant_id', $this->tenantId())
+                        ->firstOrFail();
+    }
+
+    /**
+     * Listar pagamentos de uma fatura
+     */
     public function index($fatura_id)
     {
-        $tenantId = Auth::user()->tenant_id;
-
-        $fatura = Fatura::where('tenant_id', $tenantId)->findOrFail($fatura_id);
+        $fatura = Fatura::where('tenant_id', $this->tenantId())
+                        ->findOrFail($fatura_id);
 
         $pagamentos = $fatura->pagamentos()->get();
 
         return response()->json($pagamentos);
     }
 
-    // Criar pagamento
+    /**
+     * Listar todos os pagamentos do tenant
+     */
+    public function all()
+    {
+        $pagamentos = Pagamento::where('tenant_id', $this->tenantId())
+                               ->with('fatura') // opcional: incluir dados da fatura
+                               ->get();
+
+        return response()->json($pagamentos);
+    }
+
+    /**
+     * Criar pagamento
+     */
     public function store(Request $request, $fatura_id)
     {
-        $tenantId = Auth::user()->tenant_id;
+        $fatura = Fatura::where('tenant_id', $this->tenantId())
+                        ->findOrFail($fatura_id);
 
-        $fatura = Fatura::where('tenant_id', $tenantId)->findOrFail($fatura_id);
-
-        $request->validate([
+        $validated = $request->validate([
             'data_pagamento' => 'required|date',
             'valor_pago' => 'required|numeric|min:0',
             'valor_troco' => 'nullable|numeric|min:0',
@@ -37,35 +69,34 @@ class ApiPagamentoController extends Controller
         ]);
 
         $pagamento = $fatura->pagamentos()->create(array_merge(
-            $request->all(),
-            ['tenant_id' => $tenantId]
+            $validated,
+            ['tenant_id' => $this->tenantId()]
         ));
 
-        return response()->json($pagamento, 201);
+        return response()->json([
+            'message' => 'Pagamento registrado com sucesso!',
+            'pagamento' => $pagamento
+        ], 201);
     }
 
-    // Mostrar pagamento
+    /**
+     * Mostrar um pagamento específico
+     */
     public function show($fatura_id, $id)
     {
-        $tenantId = Auth::user()->tenant_id;
+        $pagamento = $this->findPagamento($id);
 
-        $pagamento = Pagamento::where('id', $id)
-            ->where('tenant_id', $tenantId)
-            ->firstOrFail();
-
-        return response()->json($pagamento);
+        return response()->json($pagamento->load('fatura')); // inclui dados da fatura
     }
 
-    // Atualizar pagamento
+    /**
+     * Atualizar pagamento
+     */
     public function update(Request $request, $fatura_id, $id)
     {
-        $tenantId = Auth::user()->tenant_id;
+        $pagamento = $this->findPagamento($id);
 
-        $pagamento = Pagamento::where('id', $id)
-            ->where('tenant_id', $tenantId)
-            ->firstOrFail();
-
-        $request->validate([
+        $validated = $request->validate([
             'data_pagamento' => 'required|date',
             'valor_pago' => 'required|numeric|min:0',
             'valor_troco' => 'nullable|numeric|min:0',
@@ -73,22 +104,23 @@ class ApiPagamentoController extends Controller
             'metodo_pagamento' => 'required|in:boleto,cartão,pix',
         ]);
 
-        $pagamento->update($request->all());
+        $pagamento->update($validated);
 
-        return response()->json($pagamento);
+        return response()->json([
+            'message' => 'Pagamento atualizado com sucesso!',
+            'pagamento' => $pagamento
+        ]);
     }
 
-    // Deletar pagamento
+    /**
+     * Deletar pagamento
+     */
     public function destroy($fatura_id, $id)
     {
-        $tenantId = Auth::user()->tenant_id;
-
-        $pagamento = Pagamento::where('id', $id)
-            ->where('tenant_id', $tenantId)
-            ->firstOrFail();
+        $pagamento = $this->findPagamento($id);
 
         $pagamento->delete();
 
-        return response()->json(['message' => 'Pagamento removido com sucesso']);
+        return response()->json(['message' => 'Pagamento removido com sucesso!']);
     }
 }
