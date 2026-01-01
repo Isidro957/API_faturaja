@@ -1,26 +1,35 @@
 <?php
 
-
+use Illuminate\Support\Facades\Route;
 use App\Http\Middleware\ResolveTenant;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
 
-/**
- * LOGIN GLOBAL
- */
-Route::post('/login', [\App\Http\Controllers\ApiAuthController::class, 'login']);
+use App\Http\Controllers\ApiAuthController;
+use App\Http\Controllers\ApiTenantUserController;
+use App\Http\Controllers\ApiClienteController;
+use App\Http\Controllers\ApiProdutoController;
+use App\Http\Controllers\ApiFaturaController;
+use App\Http\Controllers\ApiItemFaturaController;
+use App\Http\Controllers\ApiPagamentoController;
 
-/**
- * ROTAS DO TENANT (multi-tenant)
- */
+/*
+|--------------------------------------------------------------------------
+| LOGIN GLOBAL
+|--------------------------------------------------------------------------
+*/
+Route::post('/login', [ApiAuthController::class, 'login']);
+
+/*
+|--------------------------------------------------------------------------
+| ROTAS DO TENANT (multi-tenant)
+|--------------------------------------------------------------------------
+*/
 Route::middleware([ResolveTenant::class])->group(function () {
-
-    // Registro opcional
-    Route::post('/register', [\App\Http\Controllers\ApiAuthController::class, 'register']);
 
     // Rotas protegidas
     Route::middleware(['auth:sanctum', 'tenant.user'])->group(function () {
 
+        // Informações do tenant + usuário logado
         Route::get('/tenant-info', function (Request $request) {
             return response()->json([
                 'tenant' => app('tenant'),
@@ -28,8 +37,26 @@ Route::middleware([ResolveTenant::class])->group(function () {
             ]);
         });
 
-        Route::post('/logout', [\App\Http\Controllers\ApiAuthController::class, 'logout']);
+        // Logout
+        Route::post('/logout', [ApiAuthController::class, 'logout']);
 
-        Route::apiResource('/users', \App\Http\Controllers\TenantUserController::class);
+        // USERS
+        Route::apiResource('users', ApiTenantUserController::class);
+
+        // CLIENTES
+        Route::apiResource('clientes', ApiClienteController::class);
+
+        // PRODUTOS
+        Route::apiResource('produtos', ApiProdutoController::class);
+
+        // FATURAS
+        Route::apiResource('faturas', ApiFaturaController::class);
+
+        // ITENS DE FATURA
+        Route::apiResource('faturas/{fatura}/itens', ApiItemFaturaController::class);
+
+        // PAGAMENTOS
+        Route::apiResource('faturas/{fatura}/pagamentos', ApiPagamentoController::class);
     });
+
 });

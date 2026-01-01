@@ -42,6 +42,8 @@ class BICSeeder extends Seeder
             '--force' => true,
         ]);
 
+        
+
         $this->command->info("Migrations do tenant rodadas com sucesso!");
         $this->command->info(Artisan::output()); // mostra o log das migrations
 

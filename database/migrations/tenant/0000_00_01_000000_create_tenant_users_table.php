@@ -16,6 +16,7 @@ return new class extends Migration {
             $table->timestamp('email_verified_at')->nullable();
             $table->enum('role', ['admin','cliente'])->default('cliente');
             $table->timestamps();
+            
         });
     }
 
