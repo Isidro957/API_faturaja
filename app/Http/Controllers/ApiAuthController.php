@@ -21,22 +21,14 @@ class ApiAuthController extends Controller
         ]);
 
         /**
-         * Descobrir tenant pelo email
+         * 1️⃣ Descobrir tenant pelo email (sem carregar todos)
          */
-        $tenant = Tenant::all()->first(function ($tenant) use ($request) {
-
-            config([
-                'database.connections.tenant.database' => $tenant->database_name,
-            ]);
-
-            DB::purge('tenant');
-            DB::reconnect('tenant');
-
-            return DB::connection('tenant')
-                ->table('users')
-                ->where('email', $request->email)
-                ->exists();
-        });
+        $tenant = Tenant::whereExists(function ($query) use ($request) {
+            $query->select(DB::raw(1))
+                ->from('users')
+                ->whereColumn('users.tenant_id', 'tenants.id')
+                ->where('users.email', $request->email);
+        })->first();
 
         if (! $tenant) {
             return response()->json([
@@ -45,9 +37,21 @@ class ApiAuthController extends Controller
         }
 
         /**
-         * Buscar usuário no tenant correto
+         * 2️⃣ Fixar conexão do tenant
          */
-        $user = TenantUser::where('email', $request->email)->first();
+        config([
+            'database.connections.tenant.database' => $tenant->database_name,
+        ]);
+
+        DB::purge('tenant');
+        DB::reconnect('tenant');
+
+        /**
+         * 3️⃣ Buscar usuário no tenant correto
+         */
+        $user = TenantUser::on('tenant')
+            ->where('email', $request->email)
+            ->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
             return response()->json([
@@ -56,39 +60,18 @@ class ApiAuthController extends Controller
         }
 
         /**
-         * Criar token
+         * 4️⃣ Criar token COM tenant_id
          */
-        $token = $user->createToken('api-token')->plainTextToken;
+        $token = $user->createToken('api-token', [
+            'tenant_id' => $tenant->id,
+        ])->plainTextToken;
 
         return response()->json([
-            'token'        => $token,
-            'tenant'       => $tenant->subdomain,
-            'user'         => $user,
-            'redirect_api' => "https://{$tenant->subdomain}.faturaja.sdoca/api"
+            'token'    => $token,
+            'tenant'   => $tenant->subdomain,
+            'user'     => $user,
+            'api_url'  => "http://{$tenant->subdomain}.faturaja.sdoca/api",
         ]);
-    }
-
-    /**
-     * REGISTRO (tenant já resolvido)
-     */
-    public function register(Request $request)
-    {
-        $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email',
-            'password' => 'required|min:6|confirmed',
-        ]);
-
-        $user = TenantUser::create([
-            'name'     => $request->name,
-            'email'    => $request->email,
-            'password' => Hash::make($request->password),
-        ]);
-
-        return response()->json([
-            'message' => 'Usuário criado com sucesso',
-            'user'    => $user,
-        ], 201);
     }
 
     /**

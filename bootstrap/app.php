@@ -5,6 +5,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\ResolveTenant;
 use App\Http\Middleware\EnsureTenantUser;
+use  Illuminate\Http\Middleware\HandleCors;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -23,6 +24,8 @@ return Application::configure(basePath: dirname(__DIR__))
     // Middlewares
     // -----------------------------
     ->withMiddleware(function (Middleware $middleware) {
+
+            $middleware->append(HandleCors::class);
 
         // 🔹 Middleware GLOBAL → resolve o tenant antes de tudo
         $middleware->append(ResolveTenant::class);
