@@ -26,4 +26,10 @@ class Tenant extends Model
             }
         });
     }
+
+        public function users()
+    {
+        // TenantUser é o modelo que existe em cada banco do tenant
+        return $this->hasMany(TenantUser::class, 'tenant_id', 'id');
+    }
 }

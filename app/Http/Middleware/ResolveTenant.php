@@ -16,6 +16,16 @@ class ResolveTenant
 
         /*
         |--------------------------------------------------------------------------
+        | IGNORAR landlord (faturaja.sdoca)
+        |--------------------------------------------------------------------------
+        | Se o host for exatamente faturaja.sdoca, não tentamos resolver tenant.
+        */
+        if ($host === 'faturaja.sdoca') {
+            return $next($request);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
         | NÃO resolver tenant no login/register global
         |--------------------------------------------------------------------------
         */
@@ -25,12 +35,14 @@ class ResolveTenant
 
         /*
         |--------------------------------------------------------------------------
-        | AMBIENTE LOCAL (bai.localhost)
+        | AMBIENTE LOCAL (subdomínios .faturaja.sdoca)
         |--------------------------------------------------------------------------
         */
-        if (str_ends_with($host, '.faturaja.sdoca') ){
+        if (str_ends_with($host, '.faturaja.sdoca')) {
+            $parts = explode('.', $host);
 
-            $subdomain = explode('.', $host)[0];
+            // subdomínio é sempre a primeira parte
+            $subdomain = $parts[0];
 
             $tenant = Tenant::where('subdomain', $subdomain)->first();
 
@@ -51,13 +63,14 @@ class ResolveTenant
         $parts = explode('.', $host);
 
         if (count($parts) < 3) {
-            abort(404, 'Subdomínio não encontrado.');
+            // sem subdomínio → não é tenant
+            return $next($request);
         }
 
         $subdomain = $parts[0];
 
         if ($subdomain === 'www') {
-            abort(404);
+            return $next($request);
         }
 
         $tenant = Tenant::where('subdomain', $subdomain)->first();

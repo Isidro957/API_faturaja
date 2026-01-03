@@ -11,7 +11,7 @@ use App\Models\TenantUser;
 class ApiAuthController extends Controller
 {
     /**
-     * LOGIN GLOBAL (descobre tenant pelo email)
+     * LOGIN POR EMAIL (descobre tenant automaticamente)
      */
     public function login(Request $request)
     {
@@ -20,57 +20,50 @@ class ApiAuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        /**
-         * 1️⃣ Descobrir tenant pelo email (sem carregar todos)
-         */
-        $tenant = Tenant::whereExists(function ($query) use ($request) {
-            $query->select(DB::raw(1))
-                ->from('users')
-                ->whereColumn('users.tenant_id', 'tenants.id')
-                ->where('users.email', $request->email);
-        })->first();
+        // 1️⃣ Descobrir tenant percorrendo todos os tenants
+        $tenants = Tenant::all();
+        $tenant = null;
+        $user = null;
 
-        if (! $tenant) {
+        foreach ($tenants as $t) {
+            config(['database.connections.tenant.database' => $t->database_name]);
+            DB::purge('tenant');
+            DB::reconnect('tenant');
+
+            $u = TenantUser::on('tenant')->where('email', $request->email)->first();
+            if ($u) {
+                $tenant = $t;
+                $user = $u;
+                break;
+            }
+        }
+
+        if (!$tenant || !$user) {
             return response()->json([
-                'message' => 'Usuário não pertence a nenhuma empresa'
+                'message' => 'Empresa não encontrada para este email'
             ], 404);
         }
 
-        /**
-         * 2️⃣ Fixar conexão do tenant
-         */
-        config([
-            'database.connections.tenant.database' => $tenant->database_name,
-        ]);
-
-        DB::purge('tenant');
-        DB::reconnect('tenant');
-
-        /**
-         * 3️⃣ Buscar usuário no tenant correto
-         */
-        $user = TenantUser::on('tenant')
-            ->where('email', $request->email)
-            ->first();
-
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        // 2️⃣ Verificar senha
+        if (!Hash::check($request->password, $user->password)) {
             return response()->json([
                 'message' => 'Credenciais inválidas'
             ], 401);
         }
 
-        /**
-         * 4️⃣ Criar token COM tenant_id
-         */
-        $token = $user->createToken('api-token', [
-            'tenant_id' => $tenant->id,
-        ])->plainTextToken;
+        // 3️⃣ Criar token no landlord (onde a tabela personal_access_tokens existe)
+        $token = $user
+            ->setConnection('landlord')
+            ->createToken('api-token')
+            ->plainTextToken;
 
+        // 4️⃣ Retornar dados para frontend
         return response()->json([
+            'success'  => true,
             'token'    => $token,
             'tenant'   => $tenant->subdomain,
             'user'     => $user,
-            'api_url'  => "http://{$tenant->subdomain}.faturaja.sdoca/api",
+            'redirect' => '/dashboard',
         ]);
     }
 
@@ -79,7 +72,7 @@ class ApiAuthController extends Controller
      */
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $request->user()->currentAccessToken()?->delete();
 
         return response()->json([
             'message' => 'Logout realizado com sucesso'
